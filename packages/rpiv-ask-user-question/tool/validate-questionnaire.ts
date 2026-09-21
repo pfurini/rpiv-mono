@@ -1,4 +1,16 @@
-import { MAX_QUESTIONS, MIN_OPTIONS, type QuestionnaireError, type QuestionParams, RESERVED_LABELS } from "./types.js";
+import { Type } from "typebox";
+import { Value } from "typebox/value";
+import {
+	MAX_OPTIONS,
+	MAX_QUESTIONS,
+	MIN_OPTIONS,
+	type QuestionnaireError,
+	type QuestionParams,
+	RESERVED_LABELS,
+	SetAsideSchema,
+} from "./types.js";
+
+const SetAsideListSchema = Type.Array(SetAsideSchema);
 
 export const ERROR_NO_QUESTIONS = "Error: At least one question is required";
 export const ERROR_TOO_MANY_QUESTIONS = `Error: At most ${MAX_QUESTIONS} questions are allowed per invocation`;
@@ -35,6 +47,21 @@ export function validateQuestionnaire(typed: QuestionParams): ValidationResult {
 	for (const q of typed.questions) {
 		if (q.options.length < MIN_OPTIONS) {
 			return { ok: false, error: "empty_options", message: ERROR_TOO_FEW_OPTIONS };
+		}
+		if (q.options.length > MAX_OPTIONS) {
+			return {
+				ok: false,
+				error: "too_many_options",
+				message: `Error: Each question allows at most ${MAX_OPTIONS} options; no choices were truncated`,
+			};
+		}
+		if (q.setAside !== undefined && !Value.Check(SetAsideListSchema, q.setAside)) {
+			return {
+				ok: false,
+				error: "invalid_set_aside",
+				message:
+					"Error: setAside must be an array of alternatives with a nonblank label (max 60 characters) and a nonblank reason",
+			};
 		}
 		const seenLabels = new Set<string>();
 		for (const o of q.options) {

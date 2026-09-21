@@ -1,4 +1,5 @@
 import { Key, matchesKey } from "@earendil-works/pi-tui";
+import { setAsideKey } from "../config.js";
 import type { QuestionAnswer } from "../tool/types.js";
 import { ROW_INTENT_META } from "./row-intent.js";
 import type { QuestionnaireRuntime, QuestionnaireState } from "./state.js";
@@ -18,6 +19,7 @@ const NOTES_ACTIVATE_KEY = "n";
 const SPACE_KEY = " ";
 
 export type QuestionnaireAction =
+	| { kind: "set_aside"; scroll: number | undefined }
 	| { kind: "nav"; nextIndex: number; inputValue: string }
 	| { kind: "input_clear" }
 	| { kind: "input_edit"; value: string }
@@ -315,6 +317,22 @@ export function routeKey(data: string, state: QuestionnaireState, runtime: Quest
 	}
 
 	if (state.collapsed) return routeCollapsed(kb, data);
+	if (state.setAsideScroll !== undefined) {
+		if (
+			kb.matches(data, KEYBIND_CANCEL) ||
+			isConfirm(kb, data) ||
+			matchesKey(data, setAsideKey(runtime.collapseKey))
+		) {
+			return { kind: "set_aside", scroll: undefined };
+		}
+		const switched = tabSwitchAction(data, state, runtime);
+		if (switched) return switched;
+		const maximum = runtime.setAsideMaxScroll ?? 0;
+		const current = Math.min(state.setAsideScroll, maximum);
+		if (kb.matches(data, KEYBIND_UP)) return { kind: "set_aside", scroll: Math.max(0, current - 1) };
+		if (kb.matches(data, KEYBIND_DOWN)) return { kind: "set_aside", scroll: Math.min(maximum, current + 1) };
+		return { kind: "ignore" };
+	}
 	if (state.notesVisible) return routeNotesMode(kb, data);
 	if (state.inputMode) return routeInputMode(kb, data, state, runtime);
 	if (runtime.isMulti && state.currentTab === runtime.questions.length) {
@@ -326,6 +344,9 @@ export function routeKey(data: string, state: QuestionnaireState, runtime: Quest
 
 	const q = runtime.questions[state.currentTab];
 	if (!q) return { kind: "ignore" };
+	if (q.setAside?.length && matchesKey(data, setAsideKey(runtime.collapseKey))) {
+		return { kind: "set_aside", scroll: 0 };
+	}
 
 	// Universal `n` activation (FR-1): the notes editor opens on every question tab
 	// (single- or multi-select, preview or no-preview). The blocks above already

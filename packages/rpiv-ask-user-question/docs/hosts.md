@@ -51,10 +51,21 @@ TUI produces. Trade-offs inherent to the native primitives:
   which is how the `Type something.` escape survives. An empty input commits an empty
   selection, matching `Next` with nothing toggled.
 - Dismissing any dialog cancels the whole questionnaire, mirroring `Esc` in the TUI.
+- Rejected alternatives appear in dialog titles as full label/reason text, including the custom-answer follow-up.
+  Native hosts own scrolling and disclosure; the select/input protocol has no expandable-section primitive.
+  Mocked RPC tests establish payload delivery, not whether a particular host renders long titles accessibly.
 
 If the host can render neither custom UI nor dialogs, the call returns
 `error: "no_custom_ui"` with text telling the model the user never saw the questions and
 that it should ask them as plain chat text instead — explicitly not a decline.
+
+### Structured clients and compact drawers
+
+The complete question supports up to eight selectable options and optional `setAside` label/reason pairs.
+Clients can read this data from tool-call arguments or the optional field on `rpiv:ask-user:prompt`.
+A client can keep the question and confirmation controls visible while scrolling choices inside a bounded drawer.
+Rejected alternatives belong in a separate expandable section, not the selectable list.
+The extension ships neither a mobile client nor a new RPC response protocol.
 
 ## Conditional surfaces
 

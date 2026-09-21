@@ -128,6 +128,7 @@ function switchTabResult(state: QuestionnaireState, nextTab: number, ctx: ApplyC
 		multiSelectChecked: syncMultiSelectFromAnswers(state.answers, ctx.questions, nextTab),
 		notesDraft: notesValue,
 	};
+	delete transitioned.setAsideScroll;
 	return {
 		state: transitioned,
 		effects: [
@@ -303,6 +304,12 @@ const toggleCollapsedHandler: Handler<"toggle_collapsed"> = (s, _a, _c) => ({
 	state: { ...s, collapsed: !s.collapsed },
 	effects: [{ kind: "set_overlay_hidden", hidden: !s.collapsed }],
 });
+const setAsideHandler: Handler<"set_aside"> = (state, action, _ctx) => {
+	const next = { ...state };
+	if (action.scroll === undefined) delete next.setAsideScroll;
+	else next.setAsideScroll = action.scroll;
+	return { state: next, effects: [] };
+};
 const ignoreHandler: Handler<"ignore"> = (s, _a, _c) => ({ state: s, effects: [] });
 
 /**
@@ -327,6 +334,7 @@ const HANDLERS: { [K in QuestionnaireAction["kind"]]: Handler<K> } = {
 	submit: submitHandler,
 	submit_nav: submitNavHandler,
 	toggle_collapsed: toggleCollapsedHandler,
+	set_aside: setAsideHandler,
 	ignore: ignoreHandler,
 };
 

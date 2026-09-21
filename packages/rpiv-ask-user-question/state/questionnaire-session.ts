@@ -71,6 +71,7 @@ export class QuestionnaireSession {
 	private readonly inlineInput: Editor;
 	private readonly viewAdapter: QuestionnairePropsAdapter;
 	private readonly keybindings: QuestionnaireRuntime["keybindings"];
+	private readonly getSetAsideMaxScroll: () => number;
 	private readonly editInput: QuestionnaireSessionConfig["editInput"];
 	private readonly collapseKey: string;
 	private readonly canReopenWhileHidden: boolean;
@@ -112,6 +113,7 @@ export class QuestionnaireSession {
 		this.notesInput = built.notesInput;
 		this.inlineInput = built.inlineInput;
 		this.viewAdapter = built.adapter;
+		this.getSetAsideMaxScroll = built.getSetAsideMaxScroll;
 
 		this.component = this.assembleComponent(built, config.theme);
 		this.viewAdapter.apply(this.state);
@@ -247,6 +249,7 @@ export class QuestionnaireSession {
 			currentItem: this.currentItem(),
 			items: this.itemsByTab[this.state.currentTab] ?? [],
 			collapseKey: this.collapseKey,
+			setAsideMaxScroll: this.state.setAsideScroll === undefined ? 0 : this.getSetAsideMaxScroll(),
 		};
 	}
 

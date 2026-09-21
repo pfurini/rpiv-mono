@@ -1,6 +1,6 @@
 import type { Theme } from "@earendil-works/pi-coding-agent";
 import { type Component, Container, type Editor, Spacer, Text, truncateToWidth } from "@earendil-works/pi-tui";
-import { COLLAPSE_KEY_OFF, formatKeySpecForDisplay } from "../config.js";
+import { COLLAPSE_KEY_OFF, formatKeySpecForDisplay, setAsideKey } from "../config.js";
 import { t } from "../state/i18n-bridge.js";
 import { formatAnswerScalar } from "../tool/format-answer.js";
 import type { QuestionData } from "../tool/types.js";
@@ -30,8 +30,8 @@ const REVIEW_GLOBAL_HINT = "n to add a note";
 const REVIEW_NOTE_LABEL = "Note";
 
 /**
- * Single-row, width-clipped chrome cell. The footer row count is invariant
- * (`QuestionTabStrategy.footerRowCount = 2`) — pi-tui's `Text` word-wraps when
+ * Single-row, width-clipped chrome cell. Footer height stays independent of width.
+ * pi-tui's `Text` word-wraps when
  * the styled hint exceeds `width`, inflating that row count and desyncing the
  * `bodyHeight + footerRowCount` math in `DialogView.render`. Clipping with
  * `truncateToWidth` (ANSI-aware, matches `multi-select-view.ts` usage) keeps
@@ -96,8 +96,10 @@ export interface QuestionTabStrategyConfig {
 }
 
 export class QuestionTabStrategy implements TabContentStrategy {
-	/** Spacer(1) + OneLineClippedText(hint, 1) = 2 rendered rows. */
-	readonly footerRowCount = 2;
+	/** Keep legacy footer height when no question carries rejected alternatives. */
+	get footerRowCount(): number {
+		return this.config.questions.some((question) => question.setAside?.length) ? 3 : 2;
+	}
 
 	constructor(private readonly config: QuestionTabStrategyConfig) {}
 
@@ -140,9 +142,27 @@ export class QuestionTabStrategy implements TabContentStrategy {
 		const question = this.config.questions[state.currentTab];
 		// OneLineClippedText (not pi-tui `Text`) — `buildHintText` includes the collapse
 		// affordance, pushing the rendered string past 80 columns; `Text` would wrap and
-		// break the strategy's `footerRowCount = 2` invariant. Clipping on narrow terminals
+		// break the strategy's fixed row budget. Clipping on narrow terminals
 		// drops the trailing parts (collapse hint first, then cancel) with `…`.
 		return [
+			...(this.footerRowCount === 3
+				? [
+						new OneLineClippedText(
+							question?.setAside?.length && !state.notesVisible && !state.inputMode
+								? this.config.theme.fg(
+										"muted",
+										t("alternatives.hint", "{key} alternatives").replace(
+											"{key}",
+											this.config.collapseKey === "a"
+												? formatKeySpecForDisplay(setAsideKey(this.config.collapseKey))
+												: "a",
+										),
+									)
+								: "",
+							1,
+						),
+					]
+				: []),
 			new Spacer(1),
 			new OneLineClippedText(
 				this.config.theme.fg("dim", buildHintText(question, this.config.isMulti, state, this.config.collapseKey)),

@@ -7,6 +7,16 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added
+
+- Optional question-level `setAside` alternatives carry labels and rejection reasons through normalized prompt events and both RPC dialog paths.
+- Terminal questions expose rejected alternatives through a scrollable, read-only `a` disclosure (`Ctrl+A` when collapse owns `a`). Answers and editor drafts stay separate.
+
+### Changed
+
+- Questions accept 2-8 selectable options. Schema and runtime validation reject oversized calls without truncation.
+- Default guidance treats capacity as a ceiling, not a target, and keeps rejected context separate from viable choices and user consent.
+
 ## [2.10.1] - 2026-09-13
 
 ## [2.10.0] - 2026-09-12

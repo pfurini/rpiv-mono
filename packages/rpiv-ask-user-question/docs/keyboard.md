@@ -7,13 +7,14 @@ adapts to the size of your terminal.
 
 | Key | What it does | Where it applies |
 | --- | --- | --- |
-| `↑` / `↓` | Move between rows. Wraps at both ends. | Option list, Submit picker |
-| `Enter` | Confirm the focused option, commit typed text, close notes, or activate the focused Submit-picker row. | Everywhere |
+| `↑` / `↓` | Move between rows, wrapping at both ends; scroll text without wrapping inside alternatives. | Option list, Submit picker, alternatives |
+| `Enter` | Confirm the focused option, commit typed text, close notes or alternatives, or activate the Submit picker. | Everywhere |
 | `Shift+Enter` | Insert a newline. | `Type something.` input, notes editor |
-| `Esc` | Cancel the whole questionnaire. | Everywhere except the notes editor, where it closes notes |
+| `Esc` | Cancel the questionnaire; inside notes or alternatives, return to choices instead. | Everywhere |
 | `Tab` / `Shift+Tab` | Next / previous tab, wrapping. `→` / `←` do the same. | Multi-question dialogs only |
 | `Space` | Toggle the focused checkbox. | Multi-select questions |
 | `n` | Open the notes editor for the focused question — or, on the Submit tab, the global note for the whole questionnaire. | Every question tab; the Submit tab in multi-question dialogs |
+| `a` | Open or close rejected alternatives. Uses `Ctrl+A` when `collapseKey` is `a`. | Questions with nonempty `setAside`, outside editors |
 | `Ctrl+G` | Open Pi's configured external editor with the current custom-answer draft. | `Type something.` input |
 | `Ctrl+U` | Clear the current custom-answer draft. | `Type something.` input |
 | `Ctrl+]` | Collapse or expand the dialog. Configurable via `collapseKey`. | Everywhere, including while collapsed |
@@ -33,6 +34,15 @@ without leaving the home row.
 `Space` is suppressed on two rows: `Next` (it is a command, not a choice) and
 `Type something.` (it is an inline text input, so the space character belongs to your
 answer).
+
+## Alternatives considered
+
+Questions with rejected alternatives advertise a dedicated disclosure hint, separate from the choice rows.
+The disclosure replaces the choice body with the full question and every rejected alternative's label and reason.
+Arrow keys scroll the text; Enter, Escape or the disclosure key returns without submitting an answer.
+Changing tabs closes the disclosure. Collapse and expand preserve its position.
+Editors retain literal `a` input. Options, checkbox selections, notes and custom drafts survive opening and closing.
+The disclosure clamps to the terminal dimensions and prioritizes content over chrome in very small viewports.
 
 ## The rows the dialog adds
 

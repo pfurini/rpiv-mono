@@ -93,6 +93,11 @@ export function formatKeySpecForDisplay(spec: CollapseKeySpec): string {
 		.join("+");
 }
 
+/** Preserve an existing bare-a collapse binding while keeping rejected context reachable. */
+export function setAsideKey(collapseKey: string): "a" | "ctrl+a" {
+	return collapseKey === "a" ? "ctrl+a" : "a";
+}
+
 export function loadConfig(): AskUserQuestionConfig {
 	return loadJsonConfigWithLegacyFallback<AskUserQuestionConfig>("rpiv-ask-user-question");
 }

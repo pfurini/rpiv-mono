@@ -80,13 +80,14 @@ function buildPreviewBlock(question: QuestionData): string {
 	return blocks.length > 0 ? `\n\n${blocks.join("\n\n")}` : "";
 }
 
-/**
- * Walk the questionnaire one native dialog at a time. Dismissing any dialog
- * (the primitive resolves `undefined`) cancels the whole questionnaire —
- * mirroring Esc in the TUI — and the shared envelope emits DECLINE. A
- * `QuestionAnswer` is produced per question otherwise, so the envelope is
- * identical to the TUI path's.
- */
+/** Keep rejected context in the dialog, rather than relying on preceding chat prose. */
+function buildSetAsideBlock(question: QuestionData): string {
+	if (!question.setAside?.length) return "";
+	const heading = t("alternatives.heading", "Alternatives considered");
+	return `\n\n${heading}\n${question.setAside.map(({ label, reason }) => `• ${label}: ${reason}`).join("\n")}`;
+}
+
+/** Walk native dialogs sequentially; dismissing any dialog cancels the questionnaire. */
 export async function runRpcQuestionnaire(ui: DialogUI, params: QuestionParams): Promise<QuestionnaireResult> {
 	const answers: QuestionAnswer[] = [];
 	for (let qi = 0; qi < params.questions.length; qi++) {
@@ -108,7 +109,7 @@ async function askSingleSelect(
 ): Promise<QuestionAnswer | undefined> {
 	const options = q.options.map(formatOptionLine);
 	options.push(`${q.options.length + 1}. ${displayLabel("other")}`);
-	const chosen = await ui.select(`${header}${q.question}${buildPreviewBlock(q)}`, options);
+	const chosen = await ui.select(`${header}${q.question}${buildPreviewBlock(q)}${buildSetAsideBlock(q)}`, options);
 	if (chosen == null) return undefined;
 	const idx = parseIndex(chosen, options.length);
 	// A host returning something outside the offered list is indistinguishable
@@ -125,7 +126,10 @@ async function askSingleSelect(
 		};
 	}
 	// "Type something." sentinel → free-text follow-up.
-	const typed = await ui.input(`${header}${q.question}\n\n${t("rpc.custom_answer_title", CUSTOM_ANSWER_TITLE)}`, "");
+	const typed = await ui.input(
+		`${header}${q.question}${buildSetAsideBlock(q)}\n\n${t("rpc.custom_answer_title", CUSTOM_ANSWER_TITLE)}`,
+		"",
+	);
 	if (typed == null) return undefined;
 	return { questionIndex, question: q.question, kind: "custom", answer: typed };
 }
@@ -139,7 +143,7 @@ async function askMultiSelect(
 ): Promise<QuestionAnswer | undefined> {
 	const list = q.options.map(formatOptionLine).join("\n");
 	const value = await ui.input(
-		`${header}${q.question}\n\n${list}\n\n${t("rpc.multi_instructions", MULTI_SELECT_INSTRUCTIONS)}`,
+		`${header}${q.question}\n\n${list}${buildSetAsideBlock(q)}\n\n${t("rpc.multi_instructions", MULTI_SELECT_INSTRUCTIONS)}`,
 		MULTI_SELECT_PLACEHOLDER,
 	);
 	if (value == null) return undefined;

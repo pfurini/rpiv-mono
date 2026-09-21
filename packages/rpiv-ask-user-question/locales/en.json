@@ -13,6 +13,9 @@
   "hint.notes": "n to add notes",
   "hint.tab": "Tab to switch questions",
   "hint.collapse": "{key} to collapse",
+  "alternatives.heading": "Alternatives considered",
+  "alternatives.hint": "{key} alternatives",
+  "alternatives.controls": "↑/↓ scroll · Esc back",
   "hint.expand_line": "{key} to expand · Esc to cancel",
   "hint.cancel": "Esc to cancel",
 

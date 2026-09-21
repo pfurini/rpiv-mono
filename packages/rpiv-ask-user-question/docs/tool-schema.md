@@ -17,9 +17,10 @@ ask_user_question({
           description: string,     // what the choice means / its trade-off
           preview?: string,        // markdown rendered next to the options
         },
-        // … 2-4 options total
+        // … 2-8 options total (capacity, not a target)
       ],
       multiSelect?: boolean,       // default false
+      setAside?: Array<{ label: string; reason: string }>, // rejected context, not answers
     },
     // … 1-4 questions total
   ]
@@ -32,12 +33,36 @@ ask_user_question({
 | --- | --- | --- |
 | `questions` | 1-4 entries | TypeBox schema + `validateQuestionnaire` |
 | `questions[].header` | max 16 characters | TypeBox schema only |
-| `questions[].options` | 2-4 entries | TypeBox schema (both bounds) + `validateQuestionnaire` (minimum only) |
+| `questions[].options` | 2-8 entries | TypeBox schema + `validateQuestionnaire` (both bounds) |
 | `options[].label` | max 60 characters | TypeBox schema only |
 | `options[].preview` | single-select questions only | tool description (multi-select tabs render checkbox rows) |
+| `questions[].setAside` | Optional array; empty means no disclosure | TypeBox schema + runtime validator |
+| `setAside[].label` | Nonblank, max 60 characters | TypeBox schema + runtime validator |
+| `setAside[].reason` | Nonblank string | TypeBox schema + runtime validator |
 
-The two `maxLength` limits are checked by the parameter schema before `execute` runs;
-the runtime validator does not re-check them.
+The header and selectable-option label lengths are checked by the parameter schema only.
+Both boundaries check the new rejected-alternative fields. Line terminators normalize before runtime validation.
+
+### Rejected alternatives
+
+Use `setAside` only for alternatives actually considered and rejected under the stated constraints.
+Viable choices belong in `options`; eight is a capacity limit, not a requested count.
+The tool neither invents choices nor silently truncates an oversized request.
+Settled implementation choices need a recorded reason; consent, approval and genuine preferences still require a question.
+
+```json
+{
+  "setAside": [
+    {
+      "label": "SDK builtins only",
+      "reason": "Excludes the required extension-provided tools."
+    }
+  ]
+}
+```
+
+The terminal exposes this context through a read-only disclosure. RPC dialogs include the full text in their titles.
+The context never enters the answer envelope or `details.answers`; selecting an option does not approve the model's rejection reasons.
 
 ### Reserved option labels
 
@@ -58,6 +83,8 @@ code. The `content[0].text` string is written for the model, not for a log.
 | `too_many_questions` | more than 4 questions in one call |
 | `duplicate_question` | two questions with identical text |
 | `empty_options` | a question carried fewer than 2 options |
+| `too_many_options` | a question carried more than 8 options; nothing is truncated |
+| `invalid_set_aside` | rejected alternatives are malformed, blank, or have a label longer than 60 characters |
 | `reserved_label` | an option used a reserved label |
 | `duplicate_option_label` | two options in one question share a label |
 | `no_ui` | the run has no UI (`ctx.hasUI === false`) |
@@ -115,12 +142,15 @@ import { ASK_USER_PROMPT_EVENT, type AskUserPromptEventPayload } from "@juicesha
 pi.events.on(ASK_USER_PROMPT_EVENT, (payload: AskUserPromptEventPayload) => {
   // payload.questions[].{ question, header, multiSelect, options[] }
   // payload.questions[].options[].{ label, description, hasPreview }
+  // payload.questions[].setAside?.{ label, reason }[] (full normalized text)
 });
 ```
 
 The channel name is `rpiv:ask-user:prompt`. Preview *content* is deliberately not shipped
 in the payload — only `hasPreview: boolean` — so listeners forwarding the event across a
 process or network boundary stay cheap.
+The optional `setAside` field carries full normalized labels and reasons, copied independently from the request.
+Legacy calls omit that field. Listeners should present it as model-authored context, never as a user answer.
 
 Stability policy for the `rpiv:*` namespace: channel names are immutable, payload changes
 are append-only and always optional, payloads stay JSON-safe, and any breaking change ships

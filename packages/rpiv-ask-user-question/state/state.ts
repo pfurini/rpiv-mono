@@ -41,6 +41,8 @@ export interface QuestionnaireState {
 	 *   never hide the overlay into a state nothing can reopen.
 	 */
 	collapsed: boolean;
+	/** Absent means closed; otherwise the read-only alternatives viewport starts at this row. */
+	setAsideScroll?: number;
 }
 
 /**
@@ -62,4 +64,6 @@ export interface QuestionnaireRuntime {
 	 * the collapse shortcut is disabled.
 	 */
 	collapseKey: string;
+	/** Derived from the current rendered width and terminal height, not persisted state. */
+	setAsideMaxScroll?: number;
 }

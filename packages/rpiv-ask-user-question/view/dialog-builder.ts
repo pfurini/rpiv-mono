@@ -4,6 +4,7 @@ import { DEFAULT_COLLAPSE_KEY, formatKeySpecForDisplay } from "../config.js";
 import type { QuestionnaireState } from "../state/state.js";
 import type { QuestionData } from "../tool/types.js";
 import type { PreviewPaneProps } from "./components/preview/preview-pane.js";
+import { renderSetAside } from "./components/set-aside-view.js";
 import type { TabBar } from "./components/tab-bar.js";
 import type { StatefulView } from "./stateful-view.js";
 import type { TabComponents } from "./tab-components.js";
@@ -145,6 +146,14 @@ export interface DialogConfig {
  */
 export class DialogView implements StatefulView<DialogProps> {
 	private liveProps: DialogProps;
+	private renderedWidth = 80;
+
+	getSetAsideMaxScroll(): number {
+		const question = this.config.questions[this.liveProps.state.currentTab];
+		return question
+			? renderSetAside(question, this.config.theme, this.renderedWidth, this.config.getTerminalRows(), 0).maxScroll
+			: 0;
+	}
 	private readonly config: DialogConfig;
 	private readonly questionStrategy: TabContentStrategy;
 	private readonly submitStrategy: TabContentStrategy | undefined;
@@ -187,6 +196,12 @@ export class DialogView implements StatefulView<DialogProps> {
 
 	render(width: number): string[] {
 		const state = this.liveProps.state;
+		this.renderedWidth = width;
+		const question = this.config.questions[state.currentTab];
+		if (state.setAsideScroll !== undefined && question?.setAside?.length) {
+			return renderSetAside(question, this.config.theme, width, this.config.getTerminalRows(), state.setAsideScroll)
+				.lines;
+		}
 		const onSubmit = this.config.isMulti && state.currentTab === this.config.questions.length;
 		const strategy = onSubmit && this.submitStrategy ? this.submitStrategy : this.questionStrategy;
 

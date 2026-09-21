@@ -55,6 +55,7 @@ export interface QuestionnaireBuilt {
 	inlineInput: Editor;
 	render: (width: number) => string[];
 	invalidate: () => void;
+	getSetAsideMaxScroll: () => number;
 }
 
 interface HeightComputers {
@@ -327,6 +328,7 @@ class QuestionnaireBuilder {
 			notesInput: this.notesInput,
 			inlineInput: this.inlineInput,
 			render: (w) => dialog.render(w),
+			getSetAsideMaxScroll: () => dialog.getSetAsideMaxScroll(),
 			invalidate: () => adapter.invalidate(),
 		};
 	}

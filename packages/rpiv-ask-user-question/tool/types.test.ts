@@ -90,16 +90,10 @@ describe("QuestionSchema — option/preview/multiSelect/header shape", () => {
 		expect(Value.Check(QuestionsSchema, [makeQuestion({ options: [] })])).toBe(false);
 	});
 
-	it("rejects more than MAX_OPTIONS options (maxItems=4)", () => {
-		const five = [
-			{ label: "A", description: "alpha" },
-			{ label: "B", description: "beta" },
-			{ label: "C", description: "gamma" },
-			{ label: "D", description: "delta" },
-			{ label: "E", description: "epsilon" },
-		];
-		expect(Value.Check(QuestionsSchema, [makeQuestion({ options: five })])).toBe(false);
-		expect(MAX_OPTIONS).toBe(4);
+	it("rejects more than MAX_OPTIONS options (maxItems=8)", () => {
+		const nine = Array.from({ length: 9 }, (_, i) => ({ label: `Option ${i}`, description: "A choice" }));
+		expect(Value.Check(QuestionsSchema, [makeQuestion({ options: nine })])).toBe(false);
+		expect(MAX_OPTIONS).toBe(8);
 	});
 
 	it("rejects an option missing the required description", () => {
@@ -287,7 +281,7 @@ describe("isQuestionnaireResult — type guard", () => {
 describe("schema constants + RESERVED_LABELS", () => {
 	it("exports the new schema constants with expected values", () => {
 		expect(MIN_OPTIONS).toBe(2);
-		expect(MAX_OPTIONS).toBe(4);
+		expect(MAX_OPTIONS).toBe(8);
 		expect(MAX_HEADER_LENGTH).toBe(16);
 		expect(MAX_LABEL_LENGTH).toBe(60);
 	});

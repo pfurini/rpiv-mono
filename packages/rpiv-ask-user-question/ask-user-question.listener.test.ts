@@ -89,7 +89,7 @@ function driveWithListener(handle: FakeHandle, script: (done: (v: unknown) => vo
 			factory: (
 				tui: { requestRender: () => void; terminal: { columns: number; rows: number } },
 				theme: typeof identityTheme,
-				kb: undefined,
+				kb: { matches(data: string, name: string): boolean },
 				done: (v: unknown) => void,
 			) => unknown,
 			options?: { onHandle?: (handle: FakeHandle) => void },
@@ -98,7 +98,7 @@ function driveWithListener(handle: FakeHandle, script: (done: (v: unknown) => vo
 				componentRef.current = factory(
 					{ requestRender: vi.fn(), terminal: { columns: 120, rows: 24 } },
 					identityTheme,
-					undefined,
+					{ matches: (data, name) => name === "tui.select.cancel" && data === "\x1b" },
 					resolve,
 				) as SessionComponent;
 				options?.onHandle?.(handle);
@@ -124,6 +124,31 @@ afterEach(() => {
 });
 
 describe("ask_user_question — raw terminal collapse listener", () => {
+	it("keeps Ctrl+A disclosure reachable when the raw listener owns bare a for collapse", async () => {
+		writeCollapseKeyConfig("a");
+		const tool = register();
+		const handle = makeHandle();
+		const { ctx, listenerRef, componentRef } = driveWithListener(handle, (done) => {
+			const component = componentRef.current!;
+			expect(component.render(32).join("\n")).toContain("Ctrl+A alternatives");
+			expect(listenerRef.current?.("\x01")).toBeUndefined();
+			component.handleInput("\x01");
+			expect(component.render(32).join("\n")).toContain("Alternatives considered");
+			expect(listenerRef.current?.("a")).toEqual({ consume: true });
+			expect(handle.isHidden()).toBe(true);
+			expect(listenerRef.current?.("a")).toEqual({ consume: true });
+			expect(handle.isHidden()).toBe(false);
+			expect(component.render(32).join("\n")).toContain("Alternatives considered");
+			component.handleInput("\x1b");
+			expect(component.render(32).join("\n")).not.toContain("Alternatives considered");
+			done({ answers: [], cancelled: true });
+		});
+		const withContext = {
+			questions: [{ ...params.questions[0], setAside: [{ label: "Rejected", reason: "Incompatible" }] }],
+		};
+		await tool.execute?.("tc", withContext as never, undefined as never, undefined as never, ctx);
+	});
+
 	it("hides via OverlayHandle.setHidden, notifies once, and unhides on the second press", async () => {
 		const tool = register();
 		const handle = makeHandle();

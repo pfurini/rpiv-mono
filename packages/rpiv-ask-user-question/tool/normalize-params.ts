@@ -37,8 +37,8 @@ function normalizeStringFields<T extends object>(obj: T, keys: readonly (keyof T
 
 /**
  * Return a copy of the tool params with every user-facing string field
- * (`question`, `header`, `options[].label`, `options[].description`,
- * `options[].preview`) line-terminator-normalized. Runs once at tool entry,
+ * (`question`, `header`, option fields and rejected alternatives) normalized.
+ * Runs once at tool entry,
  * BEFORE `validateQuestionnaire`, so the reserved-label and duplicate-label
  * guards compare the text the user will actually see (`"Other\r"` must not
  * slip past `reserved_label`), and so the TUI, the RPC dialog walker, the
@@ -51,6 +51,13 @@ export function normalizeQuestionParams(params: QuestionParams): QuestionParams 
 		questions: params.questions.map((q) => ({
 			...normalizeStringFields(q, ["question", "header"]),
 			options: q.options.map((o) => normalizeStringFields(o, ["label", "description", "preview"])),
+			...(Array.isArray(q.setAside)
+				? {
+						setAside: q.setAside.map((entry) =>
+							entry && typeof entry === "object" ? normalizeStringFields(entry, ["label", "reason"]) : entry,
+						),
+					}
+				: {}),
 		})),
 	};
 }

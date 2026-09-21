@@ -56,9 +56,9 @@ the footer hint segments (including the collapsed-state line and the Submit tab'
 `n to add a note` hint), the Submit picker labels, the review-tab heading with its
 submit-readiness prompt, incomplete-answers warning, and committed-note `Note` label, the
 preview pane's empty and notes-affordance lines, the notes header and the global-note
-header on the Submit tab, the
-external-editor failure notification, and the two RPC dialog prompts. Twenty-six keys in total,
-all under the namespace `@juicesharp/rpiv-ask-user-question`.
+header on the Submit tab, the external-editor failure notification and the RPC dialog prompts.
+Rejected alternatives add `alternatives.heading`, `alternatives.hint` and `alternatives.controls`.
+Keys live under `@juicesharp/rpiv-ask-user-question`; untranslated additions use the English fallback.
 
 Everything the *model* reads stays English by design: the tool description, the parameter
 schema descriptions, error messages, and the reserved-label list. Those are prompt inputs,
@@ -73,9 +73,8 @@ No code change is required.
 1. Copy `locales/en.json` to `locales/<code>.json`, where `<code>` is a locale the SDK
    supports.
 2. Translate the values. Keep every key, and keep the placeholders and leading symbols
-   (`↑/↓`, `⚠`) intact. `hint.collapse` and `hint.expand_line` contain a literal `{key}`
-   placeholder that is replaced at render time with the user's configured `collapseKey` —
-   keep it verbatim, positioned wherever your language's word order wants the key name.
+   (`↑/↓`, `⚠`) intact. `hint.collapse`, `hint.expand_line` and `alternatives.hint` contain a literal `{key}` placeholder.
+   The renderer replaces `{key}` with the effective shortcut. Keep the placeholder wherever your language requires the key name.
 3. Restart Pi and select the language with `/languages`.
 
 The loader iterates the SDK's supported-locale list over this directory at startup, so a

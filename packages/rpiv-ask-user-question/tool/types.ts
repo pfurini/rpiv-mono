@@ -3,7 +3,7 @@ import { LABELS_BY_KIND, ROW_INTENT_META } from "../state/row-intent.js";
 
 export const MAX_QUESTIONS = 4;
 export const MIN_OPTIONS = 2;
-export const MAX_OPTIONS = 4;
+export const MAX_OPTIONS = 8;
 export const MAX_HEADER_LENGTH = 16;
 export const MAX_LABEL_LENGTH = 60;
 
@@ -54,6 +54,18 @@ export const OptionSchema = Type.Object({
 	),
 });
 
+export const SetAsideSchema = Type.Object({
+	label: Type.String({
+		maxLength: MAX_LABEL_LENGTH,
+		pattern: "\\S",
+		description: "A rejected alternative, not a selectable choice.",
+	}),
+	reason: Type.String({
+		pattern: "\\S",
+		description: "Why this alternative was rejected under the stated constraints.",
+	}),
+});
+
 export const QuestionSchema = Type.Object({
 	question: Type.String({
 		description:
@@ -66,9 +78,14 @@ export const QuestionSchema = Type.Object({
 	options: Type.Array(OptionSchema, {
 		minItems: MIN_OPTIONS,
 		maxItems: MAX_OPTIONS,
-		description:
-			"The available choices for this question. Must have 2-4 options. Each option should be a distinct, mutually exclusive choice (unless multiSelect is enabled). The 'Type something.' row is appended automatically — do NOT author it.",
+		description: `Include materially distinct, viable choices (${MIN_OPTIONS}-${MAX_OPTIONS}). The maximum is capacity, not a target. Choices are mutually exclusive unless multiSelect is enabled. The 'Type something.' row is appended automatically; do not author it.`,
 	}),
+	setAside: Type.Optional(
+		Type.Array(SetAsideSchema, {
+			description:
+				"Optional alternatives actually considered and rejected, with reasons. Omit when none matter. Viable choices belong in options, not here to fit the capacity. This context is not part of the user's answer.",
+		}),
+	),
 	multiSelect: Type.Optional(
 		Type.Boolean({
 			default: false,
@@ -125,6 +142,8 @@ export type QuestionnaireError =
 	| "no_custom_ui"
 	| "no_questions"
 	| "empty_options"
+	| "too_many_options"
+	| "invalid_set_aside"
 	| "too_many_questions"
 	| "duplicate_question"
 	| "duplicate_option_label"

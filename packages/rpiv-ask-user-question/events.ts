@@ -49,6 +49,8 @@ export interface AskUserPromptQuestion {
 	/** True iff the user may pick multiple options. Normalized from optional. */
 	multiSelect: boolean;
 	options: ReadonlyArray<AskUserPromptOption>;
+	/** Model-authored rejected alternatives, never user answers. Absent on legacy calls. */
+	setAside?: ReadonlyArray<{ label: string; reason: string }>;
 }
 
 export interface AskUserPromptOption {
