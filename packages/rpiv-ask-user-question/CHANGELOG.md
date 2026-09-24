@@ -17,6 +17,8 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - Questions accept 2-8 selectable options. Schema and runtime validation reject oversized calls without truncation.
 - Default guidance treats capacity as a ceiling, not a target, and keeps rejected context separate from viable choices and user consent.
 
+## [2.11.0] - 2026-09-21
+
 ## [2.10.1] - 2026-09-13
 
 ## [2.10.0] - 2026-09-12

@@ -7,14 +7,15 @@ import {
 	dimensionsToRegrade,
 	freshVerdicts,
 	GOAL_DIMENSIONS,
-	gateRoster,
-	gateTier,
 	latestVerdictPerDimension,
 	PLAN_DIMENSIONS,
 	panelProgress,
+	panelRoster,
 	planAuthoredRisks,
+	RISK_DIMENSION,
 	SHIP_DIMENSIONS,
 	SLICE_DIMENSIONS,
+	shipRoster,
 } from "./gates.js";
 import { isSurgicalFix, priorArtifact } from "./priors.js";
 import { haltPreflight, latestFsArtifact } from "./shared.js";
@@ -100,8 +101,14 @@ const citeCheckFlag = (state: RunView, citeChannel: string | undefined): string 
  * `--prior` threads a dimension's latest fresh verdict when that dimension is
  * still pending (a confirm or re-grade of a blocking prior — the grader must
  * adjudicate the prior findings, not out-vote them) and always on correctness
- * (its re-grades scope to the prior). A carried passing prior on any other
- * dimension is not re-adjudicated. Round 1 emits no flag.
+ * and on the risk unit (their re-grades scope to the prior). A carried
+ * passing prior on any other dimension is not re-adjudicated. Round 1 emits
+ * no flag.
+ *
+ * The `RISK_DIMENSION` unit joins the roster through `panelRoster` whenever
+ * the graded channel declares `risks:` — bare flags plus `--prior`: no
+ * `--goal` (the goal-contradiction class stays with correctness), no
+ * `--cite-check` (resolution is correctness's lead source), no `--context`.
  *
  * Every panel wires `haltWhenAllFailed: true`: a generation in which EVERY
  * dispatched dimension unit failed is a dead panel — nothing was collected, so
@@ -121,7 +128,8 @@ const gradePanelFanout = (
 	fanout({
 		source: channel,
 		unit: { by: "dimension-list", pattern: "dimensions" },
-		max: dimensions.length,
+		// +1: the risk unit `panelRoster` may add on top of the dimension list.
+		max: dimensions.length + 1,
 		haltWhenAllFailed: true,
 		retryHaltedUnits: 1,
 		units: ({ state, cwd }) => {
@@ -135,7 +143,7 @@ const gradePanelFanout = (
 			// simply emit no flag.
 			const { contextFlag, goalFlag, acceptanceFlag } = dimensionArtifactFlags(state);
 			const citeFlag = citeCheckFlag(state, citeChannel);
-			const roster = gateRoster(gateTier(state, verdictChannel), dimensions);
+			const roster = panelRoster(state, channel, verdictChannel, dimensions);
 			const latest = latestVerdictPerDimension(freshVerdicts(state.named[verdictChannel], target));
 			const risks = planAuthoredRisks(state, channel);
 			const pending = dimensionsToRegrade(roster, latest, risks);
@@ -155,7 +163,7 @@ const gradePanelFanout = (
 				isSurgicalFix(state, priorChannel, cwd, target, latest, pending, risks);
 			const priorPresent = priorChannel !== undefined && priorArtifact(state, priorChannel) !== undefined;
 			const priorFlag = (d: string): string => {
-				if (d !== "correctness" && !pending.includes(d)) return "";
+				if (d !== "correctness" && d !== RISK_DIMENSION && !pending.includes(d)) return "";
 				const handle = latest.get(d)?.artifacts.find((a) => a.handle.kind === "fs")?.handle;
 				return handle ? ` --prior ${handleToString(handle)}` : "";
 			};
@@ -244,7 +252,8 @@ const CODE_PANEL_PROGRESS = panelProgress("code-verdicts", PLAN_DIMENSIONS, {
 export const SHIP_DIMENSION_FANOUT = fanout({
 	source: "plans",
 	unit: { by: "dimension-list", pattern: "dimensions" },
-	max: SHIP_DIMENSIONS.length,
+	// +1: the risk unit `shipRoster` adds when the plan declares `risks:`.
+	max: SHIP_DIMENSIONS.length + 1,
 	haltWhenAllFailed: true,
 	retryHaltedUnits: 1,
 	units: ({ state }) => {
@@ -258,8 +267,9 @@ export const SHIP_DIMENSION_FANOUT = fanout({
 		// the configured channel carries no fs verdict; a clean verdict settles
 		// resolution, findings carry the advisory leads (see citeCheckFlag).
 		const citeFlag = citeCheckFlag(state, "plan-cite-check");
-		// Tier-independent roster: SHIP_DIMENSIONS verbatim — never gateRoster(gateTier(...)).
-		const roster = SHIP_DIMENSIONS;
+		// Tier-independent roster: SHIP_DIMENSIONS verbatim (plus the risk unit
+		// when the plan declares risks) — never gateRoster(gateTier(...)).
+		const roster = shipRoster(state);
 		const latest = latestVerdictPerDimension(freshVerdicts(state.named["ship-verdicts"], target));
 		const risks = planAuthoredRisks(state, "plans");
 		const pending = dimensionsToRegrade(roster, latest, risks);
