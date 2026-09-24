@@ -51,6 +51,27 @@ const PLAN_DIMENSIONS = [
 export const SHIP_DIMENSIONS = ["completeness", "correctness", "architecture-fit"] as const;
 
 /**
+ * The plan-authored risk-flag ruling unit, split OUT of `correctness` so the
+ * two judgments run as concurrent panel members instead of one serial judge.
+ * Across 175 build panels the correctness unit finished last in 140 (80%), at
+ * 2.2× the median sibling with no flags and no prior, and the risk-ruling +
+ * prior-adjudication duties added ~1.7 min on top (4.9 → 6.6 min p50) — the
+ * panel's wall time IS the correctness unit's. This dimension rules every
+ * `risks:` flag (the mechanics-evidence and verify-at-implement duties move
+ * with it, see the `grade` skill), adjudicates its OWN prior rulings on a
+ * re-grade, and emits `risk_rulings` — the field every risk fold reads
+ * (`allRiskFlagsPass`, `dimensionsToRegrade` clause 3, `confirmDue`,
+ * `demoteDuties`, amend's cite derivation). Correctness keeps only its
+ * semantic three-class findings. Dispatched ONLY when the graded channel's
+ * latest record declares `risks:` (`panelRoster`) — a plan with no flags
+ * pays for no unit — and at EVERY tier when it does (the light roster used to
+ * rule risks through its correctness member; the duty follows the split). A
+ * legacy trail whose correctness verdicts still carry `risk_rulings` folds
+ * unchanged: every risk fold is dimension-agnostic.
+ */
+export const RISK_DIMENSION = "risk-rulings" as const;
+
+/**
  * The two dimensions the grade panels anchor against the verbatim brief.
  * "Complete" and "correct" MEAN "against what the user asked" — without the
  * goal, completeness grades the plan against the plan's own claims. The other
@@ -155,6 +176,37 @@ const gateRoster = (tier: GateTier, dimensions: readonly string[]): readonly str
 	const light = dimensions.filter((d) => LIGHT_ROSTER.has(d));
 	return light.length > 0 ? light : dimensions;
 };
+
+/**
+ * The roster a panel over `channel` actually dispatches and its gate actually
+ * folds: the tier roster (`gateRoster(gateTier(...))`) plus the
+ * `RISK_DIMENSION` unit whenever the channel's latest record declares
+ * `risks:` — at every tier, never otherwise. ONE construction site shared by
+ * the panel's `units()`, the gate predicates, `confirmDue`, and the progress
+ * hook, so "dispatch", "fold", "confirm", and "lap complete" can never
+ * disagree on whether the risk unit is a roster member. A roster that never
+ * declares risks (the slice gate over `slices`) is unchanged. Idempotent over
+ * a `dimensions` list that already names the risk dimension.
+ */
+const panelRoster = (
+	state: RunView,
+	channel: string,
+	verdictChannel: string,
+	dimensions: readonly string[],
+): readonly string[] => {
+	const roster = gateRoster(gateTier(state, verdictChannel), dimensions);
+	if (roster.includes(RISK_DIMENSION) || planAuthoredRisks(state, channel).size === 0) return roster;
+	return [...roster, RISK_DIMENSION];
+};
+
+/**
+ * Ship's tier-independent twin of `panelRoster`: `SHIP_DIMENSIONS` verbatim
+ * (never `gateRoster(gateTier(...))`) plus the risk unit when the plan
+ * declares `risks:`. Bound by the ship panel, `shipGatePasses`, and ship's
+ * stop note alike.
+ */
+const shipRoster = (state: RunView): readonly string[] =>
+	planAuthoredRisks(state, "plans").size === 0 ? SHIP_DIMENSIONS : [...SHIP_DIMENSIONS, RISK_DIMENSION];
 
 /**
  * Drop verdicts judged against an artifact the channel has since REPLACED. A
@@ -405,7 +457,14 @@ const panelProgress =
 		{ snapshotChannel, artifactChannel }: { snapshotChannel?: string; artifactChannel?: string } = {},
 	) =>
 	(state: RunView): ProgressValue => {
-		const roster = gateRoster(gateTier(state, verdictChannel), dimensions);
+		// The artifact channel is where `risks:` lives, so a lane that names it
+		// folds the risk unit into its roster exactly as its panel and gate do;
+		// a lane without one (no plan channel to declare risks on) keeps the
+		// tier roster.
+		const roster =
+			artifactChannel !== undefined
+				? panelRoster(state, artifactChannel, verdictChannel, dimensions)
+				: gateRoster(gateTier(state, verdictChannel), dimensions);
 		const entries = state.named[verdictChannel] ?? [];
 		const currentArtifact = artifactChannel !== undefined ? latestArtifactPath(state, artifactChannel) : undefined;
 		const foldRound = (rows: readonly Output[]): ReadonlyMap<string, Output> =>
@@ -752,7 +811,7 @@ const seedLiftStuck = (state: RunView): boolean => {
 const subplanGatePasses = (state: RunView): boolean => allDimensionsPass(state.named["subplan-check"]);
 const planGatePasses = (state: RunView): boolean => {
 	const fresh = freshVerdicts(state.named["plan-verdicts"], latestArtifactPath(state, "plans"));
-	const roster = gateRoster(gateTier(state, "plan-verdicts"), PLAN_DIMENSIONS);
+	const roster = panelRoster(state, "plans", "plan-verdicts", PLAN_DIMENSIONS);
 	const risks = planAuthoredRisks(state, "plans");
 	return (
 		allDimensionsPass(state.named["plan-cite-check"]) &&
@@ -762,7 +821,7 @@ const planGatePasses = (state: RunView): boolean => {
 };
 const codeGatePasses = (state: RunView): boolean => {
 	const fresh = freshVerdicts(state.named["code-verdicts"], latestArtifactPath(state, "plans"));
-	const roster = gateRoster(gateTier(state, "code-verdicts"), PLAN_DIMENSIONS);
+	const roster = panelRoster(state, "plans", "code-verdicts", PLAN_DIMENSIONS);
 	const risks = planAuthoredRisks(state, "plans");
 	return (
 		allDimensionsPass(state.named["code-cite-check"]) &&
@@ -777,13 +836,16 @@ const codeGatePasses = (state: RunView): boolean => {
  * (severity-floored) AND every plan-authored risk flag is ruled pass. Unlike
  * `planGatePasses`/`codeGatePasses` it folds NO deterministic cite channel —
  * ship's `plan-cite-check` gate is routed at its own edge — and binds the
- * roster to `SHIP_DIMENSIONS` verbatim (never `gateRoster(gateTier(...))`), so
- * the gate consults the same fixed set the panel graded.
+ * roster to `shipRoster` (`SHIP_DIMENSIONS` verbatim plus the risk unit when
+ * the plan declares `risks:` — never `gateRoster(gateTier(...))`), so the gate
+ * consults the same fixed set the panel graded, and a dead risk unit's
+ * dimension-bearing sentinel blocks instead of vanishing behind a vacuous
+ * `allRiskFlagsPass`.
  */
 export const shipGatePasses = (state: RunView): boolean => {
 	const fresh = freshVerdicts(state.named["ship-verdicts"], latestArtifactPath(state, "plans"));
 	const risks = planAuthoredRisks(state, "plans");
-	return allDimensionsPass(fresh, SHIP_DIMENSIONS) && allRiskFlagsPass(fresh, risks);
+	return allDimensionsPass(fresh, shipRoster(state)) && allRiskFlagsPass(fresh, risks);
 };
 
 /**
@@ -826,7 +888,7 @@ const confirmDue = (
 	verdictChannel: string,
 	dimensions: readonly string[],
 ): boolean => {
-	const roster = new Set(gateRoster(gateTier(state, verdictChannel), dimensions));
+	const roster = new Set(panelRoster(state, channel, verdictChannel, dimensions));
 	const fresh = freshVerdicts(state.named[verdictChannel], latestArtifactPath(state, channel));
 	const risks = planAuthoredRisks(state, channel);
 	const byDim = new Map<string, { blocking: boolean; confirmWorthy: boolean; prevBlocking?: boolean }>();
@@ -887,6 +949,7 @@ export {
 	latestVerdictPerDimension,
 	PLAN_DIMENSIONS,
 	panelProgress,
+	panelRoster,
 	planAuthoredRisks,
 	planGatePasses,
 	procedureSatisfiesDuty,
@@ -898,6 +961,7 @@ export {
 	seedLiftStuck,
 	seedOnlyCiteFail,
 	seedOnlyFindings,
+	shipRoster,
 	sliceGatePasses,
 	subplanGatePasses,
 	type VerdictRecord,

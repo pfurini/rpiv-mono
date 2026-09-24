@@ -70,11 +70,11 @@ import {
 	planGatePasses,
 	planSnapshot,
 	REVIEW_PHASE_ITERATE,
+	RISK_DIMENSION,
 	reconcile,
 	remediationOutcome,
 	rulingEffectivePass,
 	SHIP_DIMENSION_FANOUT,
-	SHIP_DIMENSIONS,
 	SHIP_PANEL_PROGRESS,
 	SLICE_DESIGN_FANOUT,
 	SLICE_DIMENSION_FANOUT,
@@ -85,6 +85,7 @@ import {
 	seedLiftStuck,
 	seedOnlyCiteFail,
 	shipGatePasses,
+	shipRoster,
 	shipVerdictOutcome,
 	sliceGatePasses,
 	sliceSeedLift,
@@ -652,6 +653,16 @@ const sliceGradeRoute: EdgeFn = defineRoute(
 	{ readsData: false },
 );
 
+/**
+ * Every unit a plan/code panel can dispatch — the tier roster's dimensions
+ * plus the risk unit `panelRoster` adds when the plan declares `risks:`. The
+ * dead-unit preemption filters on a failed sentinel per dimension, so naming
+ * the risk unit here is safe when it was never dispatched (no sentinel ⇒ not
+ * listed) and load-bearing when it was (a dead risk unit is a dead panel
+ * member, not a vacuous risk pass).
+ */
+const PLAN_PANEL_UNITS: readonly string[] = [...PLAN_DIMENSIONS, RISK_DIMENSION];
+
 /** The plan gate's demote edge — the unit-failed preemption fires BEFORE the
  *  confirm divert (a previously-passing dimension whose re-grade died is not
  *  a flap to adjudicate; there is no verdict to adjudicate). */
@@ -659,7 +670,7 @@ const planDemoteRoute: EdgeFn = defineRoute(
 	["code", "plan-confirm", "plan-snapshot"],
 	({ state }) => {
 		if (planGatePasses(state)) return "code";
-		const unitFailed = unitFailedDimensions(state, "plans", "plan-verdicts", PLAN_DIMENSIONS);
+		const unitFailed = unitFailedDimensions(state, "plans", "plan-verdicts", PLAN_PANEL_UNITS);
 		if (unitFailed.length > 0) {
 			setRouteNote(planDemoteRoute, unitFailedNote(unitFailed));
 			return "plan-snapshot";
@@ -674,7 +685,7 @@ const codeDemoteRoute: EdgeFn = defineRoute(
 	["implement", "code-confirm", "code-snapshot"],
 	({ state }) => {
 		if (codeGatePasses(state)) return "implement";
-		const unitFailed = unitFailedDimensions(state, "plans", "code-verdicts", PLAN_DIMENSIONS);
+		const unitFailed = unitFailedDimensions(state, "plans", "code-verdicts", PLAN_PANEL_UNITS);
 		if (unitFailed.length > 0) {
 			setRouteNote(codeDemoteRoute, unitFailedNote(unitFailed));
 			return "code-snapshot";
@@ -687,7 +698,7 @@ const codeDemoteRoute: EdgeFn = defineRoute(
 const buildWorkflow = defineWorkflow({
 	name: "build",
 	description:
-		"Ship, sliced: capture the verbatim brief as a goal artifact (the north star the quality gates' completeness/correctness dimensions and validate anchor against) → research the brief → derive a goal-anchored acceptance inventory (the executable standard of completion, frozen before any plan so it cannot inherit the plan's scope; the completeness gates anchor on it and validate executes its evidence commands) → decompose it into vertical slices → two-phase slice gate (a deterministic floor — dependency-cycle freedom + brief-coverage conservation so a slice-fix can't pass by dropping scope — then one LLM design-readiness judgment that each slice is chewable by a single design pass) with a slice-fix loop → design each slice in parallel → one consolidated developer checkpoint (accept or adjust the proposed interfaces/data types, adjustments applied surgically and cascaded to dependents) → synthesize hierarchically (per-cluster sub-plans → one merged plan) → tier-scaled quality-panel gate (a one-slice, <=2-phase run grades correctness+completeness only; larger or previously-failing runs grade the full completeness/correctness/actionability/pattern-following/architecture-fit roster) where a dimension's fresh HIGH-severity, risk-ruling, or regressed-pass blocking verdict gets one confirming second judgment before it buys a plan-fix round (a first-time medium finding routes straight to the surgical fix) → elaborate code per phase in parallel → splice it into the plan → re-grade the code-bearing plan (same tier + confirm contract) → implement → implement-scope-check → reconcile → validate → commit. Research-led; three automated gates plus one human design checkpoint, before design, before code, and after the splice.",
+		"Ship, sliced: capture the verbatim brief as a goal artifact (the north star the quality gates' completeness/correctness dimensions and validate anchor against) → research the brief → derive a goal-anchored acceptance inventory (the executable standard of completion, frozen before any plan so it cannot inherit the plan's scope; the completeness gates anchor on it and validate executes its evidence commands) → decompose it into vertical slices → two-phase slice gate (a deterministic floor — dependency-cycle freedom + brief-coverage conservation so a slice-fix can't pass by dropping scope — then one LLM design-readiness judgment that each slice is chewable by a single design pass) with a slice-fix loop → design each slice in parallel → one consolidated developer checkpoint (accept or adjust the proposed interfaces/data types, adjustments applied surgically and cascaded to dependents) → synthesize hierarchically (per-cluster sub-plans → one merged plan) → tier-scaled quality-panel gate (a one-slice, <=2-phase run grades correctness+completeness only; larger or previously-failing runs grade the full completeness/correctness/actionability/pattern-following/architecture-fit roster; a plan declaring risk flags adds a concurrent risk-rulings unit at every tier) where a dimension's fresh HIGH-severity, risk-ruling, or regressed-pass blocking verdict gets one confirming second judgment before it buys a plan-fix round (a first-time medium finding routes straight to the surgical fix) → elaborate code per phase in parallel → splice it into the plan → re-grade the code-bearing plan (same tier + confirm contract) → implement → implement-scope-check → reconcile → validate → commit. Research-led; three automated gates plus one human design checkpoint, before design, before code, and after the splice.",
 	start: "goal",
 	stages: {
 		// The user's brief, verbatim, on its own channel — the judgment seams
@@ -785,8 +796,11 @@ const buildWorkflow = defineWorkflow({
 		"subplan-check": produces.script({ reads: [fanin("subplans"), "slices"], run: subplanCoverageCheck }),
 		// The root merge reads `research` (threaded as `--research` so cross-slice
 		// constraints reach the merge directly, not only via each subplan's
-		// refraction) alongside the cluster sub-plans it fans in.
-		plan: produces({ skill: "synthesize", reads: ["research", fanin("subplans")] }),
+		// refraction) alongside the cluster sub-plans it fans in. `goal` +
+		// `acceptance` reach it too: synthesize disposes every inventory id in the
+		// plan's `acceptance:` block, the same anchors the completeness judge and
+		// validate read.
+		plan: produces({ skill: "synthesize", reads: ["research", "goal", "acceptance", fanin("subplans")] }),
 		// Deterministic citation floor BEFORE the LLM plan gate (twin of `slice-check`):
 		// a fabricated `file:line` in the plan fails structurally and routes to `plan-fix`.
 		"plan-cite-check": produces.script({ reads: ["plans"], run: planCitationCheck("plan-cite-check") }),
@@ -831,7 +845,15 @@ const buildWorkflow = defineWorkflow({
 			// mirrors `plan`'s own `reads: ["research", fanin("subplans")]`. `subplans`
 			// is plan-fix-ONLY — by the code gate the plan's completeness is settled, so
 			// code-fix repairs code-shape defects and threads no subplans.
-			reads: ["plans", fanin("plan-verdicts"), fanin("plan-cite-check"), "goal", "research", fanin("subplans")],
+			reads: [
+				"plans",
+				fanin("plan-verdicts"),
+				fanin("plan-cite-check"),
+				"goal",
+				"acceptance",
+				"research",
+				fanin("subplans"),
+			],
 		}),
 		// Snapshot the graded plan BEFORE plan-fix amends it — one deterministic
 		// hop inside the existing fix loop (plan-grade/plan-confirm → plan-snapshot
@@ -1186,14 +1208,14 @@ const shipGradeStopNote = (state: RunView): string => {
 	// A dead grade unit (post-re-dispatch) is the loudest blocker — name it
 	// ahead of the severity blockers (ship's arm is stop + hand-repair +
 	// resume, so the note IS the repair instruction).
-	const unitFailed = unitFailedDimensions(state, "plans", "ship-verdicts", SHIP_DIMENSIONS);
+	const unitFailed = unitFailedDimensions(state, "plans", "ship-verdicts", shipRoster(state));
 	if (unitFailed.length > 0) return unitFailedNote(unitFailed);
 	const fresh = freshVerdicts(state.named["ship-verdicts"], latestArtifactPath(state, "plans"));
 	if (fresh.length === 0) return "no fresh verdicts for the current plan";
 	const risks = planAuthoredRisks(state, "plans");
 	const latest = latestVerdictPerDimension(fresh);
 	const blockers: string[] = [];
-	for (const d of SHIP_DIMENSIONS) {
+	for (const d of shipRoster(state)) {
 		const o = latest.get(d);
 		if (!o) continue;
 		const v = o.data as VerdictRecord | undefined;

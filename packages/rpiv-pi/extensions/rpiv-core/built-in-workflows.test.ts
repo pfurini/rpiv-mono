@@ -3715,12 +3715,15 @@ describe("build audit-drop fixes", () => {
 	// reconstructing them from verdict prose. Regression guard against a future
 	// narrowing of the reads arrays (and against wrongly adding subplans to code-fix).
 	describe("plan-fix/code-fix read their lineage sources (phase 4)", () => {
-		it("build plan-fix reads goal, research, and subplans alongside the verdict/cite-check channels", () => {
+		it("build plan-fix reads goal, acceptance, research, and subplans alongside the verdict/cite-check channels", () => {
+			// `acceptance` rides along so a completeness finding naming an inventory
+			// id is repaired in the plan's `acceptance:` block against a real id.
 			expect(findWorkflow("build").stages["plan-fix"]?.reads).toEqual([
 				"plans",
 				fanin("plan-verdicts"),
 				fanin("plan-cite-check"),
 				"goal",
+				"acceptance",
 				"research",
 				fanin("subplans"),
 			]);
@@ -4455,10 +4458,14 @@ describe("plan/code gate risk-ruling evidence + verify-at-implement duty (phase 
 	});
 
 	describe("re-open coherence (dimensionsToRegrade clause 3)", () => {
-		it("a demoted mechanics pass on correctness re-opens correctness in the re-grade set", async () => {
+		it("a demoted mechanics pass on a LEGACY correctness verdict re-opens correctness, and the never-ruled risk unit joins it", async () => {
 			// full roster (no slices signal ⇒ standard tier); every dimension
 			// passes with a FRESH verdict (artifact: PLAN), only correctness
-			// carries a demoted mechanics pass ⇒ only correctness re-grades.
+			// carries a demoted mechanics pass ⇒ correctness re-grades (clause 3
+			// is dimension-agnostic, so a pre-split trail whose correctness
+			// verdict still carries rulings re-opens exactly as before). The plan
+			// declares risks: and no `risk-rulings` verdict exists yet, so the
+			// risk unit is pending too — never graded ⇒ must grade at least once.
 			const verdicts = PLAN_DIMS.map((d) =>
 				d === "correctness"
 					? verdict(d, true, { artifact: PLAN, risk_rulings: [{ id: "r1", pass: true, claim_type: "mechanics" }] })
@@ -4470,7 +4477,7 @@ describe("plan/code gate risk-ruling evidence + verify-at-implement duty (phase 
 					"plan-cite-check": [chan(".rpiv/artifacts/verdicts/plan-cite-check__p.json")],
 					"plan-verdicts": verdicts,
 				}),
-			).toEqual(["correctness"]);
+			).toEqual(["correctness", "risk-rulings"]);
 		});
 	});
 
@@ -5528,8 +5535,11 @@ describe("build subplan cluster fanout (research threading + fail-loud mapping)"
 		expect(units.every((u) => u.prompt.includes("--as-subplan"))).toBe(true);
 	});
 
-	it("build plan stage reads research alongside the subplans fan-in (finding 4)", () => {
-		expect(findWorkflow("build").stages.plan?.reads).toEqual(["research", fanin("subplans")]);
+	it("build plan stage reads research, goal, and acceptance alongside the subplans fan-in (finding 4)", () => {
+		// Same-anchor wiring as ship's plan stage: the root merge sees the goal and
+		// the frozen inventory the completeness judge and validate read, so it can
+		// dispose of every inventory id in the plan's `acceptance:` block.
+		expect(findWorkflow("build").stages.plan?.reads).toEqual(["research", "goal", "acceptance", fanin("subplans")]);
 	});
 
 	// Finding 8 — an artifact whose identity can't be resolved must FAIL LOUD, not
@@ -9339,5 +9349,233 @@ describe("whole-lap progress declarations (panelProgress on the built-in panel l
 		const before = SLICE_PANEL_PROGRESS(beforeLift as unknown as RunView);
 		expect(before).toBe("unchanged");
 		expect(SLICE_PANEL_PROGRESS(afterLift as unknown as RunView)).toBe(before);
+	});
+});
+
+// ---------------------------------------------------------------------------
+// The risk-rulings panel unit — plan-authored `risks:` flags are ruled by
+// their OWN concurrent unit (split out of correctness, which finished last in
+// 80% of panels). Dispatched only when the graded plan declares `risks:`, at
+// every tier; correctness keeps its flags (--goal, --cite-check) untouched;
+// the gate, confirm divert, progress hook and dead-unit route all fold the
+// unit through the one `panelRoster` authority.
+// ---------------------------------------------------------------------------
+
+describe("risk-rulings panel unit (split out of correctness)", () => {
+	const build = () => findWorkflow("build");
+	const PLAN = ".rpiv/artifacts/plans/p.md";
+	const RISKS = [{ id: "r1", claim: "the helper returns early on undefined", claim_type: "mechanics" }];
+	const chan = (rel: string, data?: Record<string, unknown>): Output =>
+		({ artifacts: [{ handle: fsHandle(rel) }], data, kind: "", meta: {} }) as unknown as Output;
+	const verdict = (dimension: string, pass: boolean, extra: Record<string, unknown> = {}): Output =>
+		({
+			artifacts: [{ handle: fsHandle(`.rpiv/artifacts/verdicts/p__${dimension}__r1.json`) }],
+			kind: "json",
+			meta: {},
+			data: { dimension, pass, severity: pass ? "none" : "medium", artifact: PLAN, ...extra },
+		}) as unknown as Output;
+	// A GREEN citation floor on both channels: the gate predicates fold the
+	// floor's own verdict (`allDimensionsPass(state.named["plan-cite-check"])`),
+	// so the channel must carry a passing dimension verdict, not a bare handle.
+	const citeChannels = {
+		"plan-cite-check": [
+			chan(".rpiv/artifacts/verdicts/plan-cite-check__p.json", {
+				dimension: "citations",
+				pass: true,
+				severity: "none",
+			}),
+		],
+		"code-cite-check": [
+			chan(".rpiv/artifacts/verdicts/code-cite-check__p.json", {
+				dimension: "citations",
+				pass: true,
+				severity: "none",
+			}),
+		],
+	};
+	const units = async (stage: string, named: Record<string, unknown>) => {
+		const loop = build().stages[stage]?.loop;
+		if (loop?.kind !== "fanout") throw new Error(`build ${stage} stage has no fanout loop`);
+		return loop.units({ cwd: "/repo", artifact: undefined, state: { named } as unknown as RunView });
+	};
+	const edge = (stage: string, named: Record<string, unknown>) => {
+		const e = build().edges[stage];
+		if (typeof e !== "function") throw new Error(`build ${stage} edge is not a function`);
+		return (e as EdgeFn)({ output: undefined, state: { named } as unknown as RunView });
+	};
+	const FIVE = ["actionability", "architecture-fit", "completeness", "correctness", "pattern-following"];
+	const passingFive = () => FIVE.map((d) => verdict(d, true));
+
+	it("dispatches the risk-rulings unit beside the five dimensions when the plan declares risks:, with bare flags plus nothing correctness-specific", async () => {
+		const us = await units("plan-grade", {
+			plans: [chan(PLAN, { risks: RISKS })],
+			goal: [chan(".rpiv/artifacts/goal/g.md")],
+			research: [chan(".rpiv/artifacts/research/r.md")],
+			...citeChannels,
+			"plan-verdicts": [],
+		});
+		expect(us.map((u) => u.label).sort()).toEqual([...FIVE, "risk-rulings"].sort());
+		const risk = us.find((u) => u.label === "risk-rulings");
+		expect(risk?.id).toBe("plans-dim-risk-rulings");
+		expect(risk?.prompt).toBe(`--dimension risk-rulings --artifact ${PLAN}`);
+		// Correctness keeps its own inputs — the split moves duties, not flags.
+		const correctness = us.find((u) => u.label === "correctness");
+		expect(correctness?.prompt).toContain("--goal .rpiv/artifacts/goal/g.md");
+		expect(correctness?.prompt).toContain("--cite-check");
+	});
+
+	it("emits no risk unit when the plan declares no risks: (the lightening quick-plan relies on)", async () => {
+		const us = await units("plan-grade", { plans: [chan(PLAN, {})], ...citeChannels, "plan-verdicts": [] });
+		expect(us.map((u) => u.label).sort()).toEqual(FIVE);
+		expect(build().stages["plan-grade"]?.loop?.kind === "fanout").toBe(true);
+	});
+
+	it("joins the light-tier roster too — the duty follows the split out of the light roster's correctness member", async () => {
+		const us = await units("code-grade", {
+			slices: [chan(".rpiv/artifacts/slices/s.md", { slice_count: 1 })],
+			plans: [chan(PLAN, { phase_count: 1, risks: RISKS })],
+			...citeChannels,
+			"code-verdicts": [],
+		});
+		expect(us.map((u) => u.label).sort()).toEqual(["completeness", "correctness", "risk-rulings"]);
+	});
+
+	it("a failed ruling re-opens ONLY the risk unit, threading its verdict as --prior; a passing correctness carries forward", async () => {
+		const failedRisk = verdict("risk-rulings", false, { risk_rulings: [{ id: "r1", pass: false }] });
+		const us = await units("plan-grade", {
+			plans: [chan(PLAN, { risks: RISKS })],
+			...citeChannels,
+			"plan-verdicts": [...passingFive(), failedRisk],
+		});
+		expect(us.map((u) => u.label)).toEqual(["risk-rulings"]);
+		expect(us[0]?.prompt).toContain("--prior .rpiv/artifacts/verdicts/p__risk-rulings__r1.json");
+	});
+
+	it("a duty-demoted pass (mechanics ruling with no file:line evidence) re-opens the risk unit and fails the gate", async () => {
+		const demoted = verdict("risk-rulings", true, {
+			risk_rulings: [{ id: "r1", pass: true, claim_type: "mechanics" }],
+		});
+		const named = {
+			plans: [chan(PLAN, { risks: RISKS })],
+			...citeChannels,
+			"plan-verdicts": [...passingFive(), demoted],
+		};
+		expect(planGatePasses({ named } as unknown as RunView)).toBe(false);
+		expect((await units("plan-grade", named)).map((u) => u.label)).toEqual(["risk-rulings"]);
+		const grounded = verdict("risk-rulings", true, {
+			risk_rulings: [
+				{ id: "r1", pass: true, claim_type: "mechanics", evidence: "packages/x/y.ts:42 — early return" },
+			],
+		});
+		expect(
+			planGatePasses({
+				named: { ...named, "plan-verdicts": [...passingFive(), grounded] },
+			} as unknown as RunView),
+		).toBe(true);
+	});
+
+	it("the plan gate blocks on a dead risk unit (a dimension-bearing sentinel), and the demote edge routes it as unit-failed", () => {
+		const sentinel = {
+			artifacts: [],
+			kind: "failed",
+			meta: {},
+			data: { dimension: "risk-rulings" },
+		} as unknown as Output;
+		const named = {
+			plans: [chan(PLAN, { risks: RISKS })],
+			...citeChannels,
+			"plan-verdicts": [...passingFive(), sentinel],
+		};
+		expect(planGatePasses({ named } as unknown as RunView)).toBe(false);
+		expect(edge("plan-demote", named)).toBe("plan-snapshot");
+		// Without a risks: declaration the same sentinel is outside the roster —
+		// the five passing dimensions clear the gate.
+		expect(planGatePasses({ named: { ...named, plans: [chan(PLAN, {})] } } as unknown as RunView)).toBe(true);
+	});
+
+	it("a fresh failed ruling on the risk unit is confirm-worthy (routes plan-confirm), and the confirm panel re-emits only that unit", async () => {
+		const failedRisk = verdict("risk-rulings", false, { risk_rulings: [{ id: "r1", pass: false }] });
+		const named = {
+			plans: [chan(PLAN, { risks: RISKS })],
+			...citeChannels,
+			"plan-verdicts": [...passingFive(), failedRisk],
+		};
+		expect(edge("plan-demote", named)).toBe("plan-confirm");
+		const us = await units("plan-confirm", named);
+		expect(us.map((u) => u.label)).toEqual(["risk-rulings"]);
+		expect(us[0]?.prompt).toContain("--prior");
+	});
+
+	it("the whole-lap progress hook counts the risk unit as a roster member only when risks are declared", () => {
+		const snapshot = {
+			artifacts: [],
+			kind: "json",
+			meta: { ts: "2026-09-20T10:00:00.000Z" },
+			data: {},
+		} as unknown as Output;
+		const at = (o: Output, ts: string): Output => ({ ...o, meta: { ...o.meta, ts } });
+		const r1 = [...FIVE.map((d) => at(verdict(d, true), "2026-09-20T09:00:00.000Z"))];
+		// Risks declared, but the current round never graded the risk unit: the
+		// lap is incomplete — never a waiver on missing evidence.
+		expect(
+			PLAN_PANEL_PROGRESS({
+				named: {
+					plans: [chan(PLAN, { risks: RISKS })],
+					"plan-snapshot": [snapshot],
+					"plan-verdicts": [...r1, ...FIVE.map((d) => at(verdict(d, true), "2026-09-20T11:00:00.000Z"))],
+				},
+			} as unknown as RunView),
+		).toBe("unknown");
+		// No risks declared: the same trail folds over the five and improves.
+		expect(
+			PLAN_PANEL_PROGRESS({
+				named: {
+					plans: [chan(PLAN, {})],
+					"plan-snapshot": [snapshot],
+					"plan-verdicts": [
+						...FIVE.map((d) => at(verdict(d, d !== "correctness"), "2026-09-20T09:00:00.000Z")),
+						...FIVE.map((d) => at(verdict(d, true), "2026-09-20T11:00:00.000Z")),
+					],
+				},
+			} as unknown as RunView),
+		).toBe("improved");
+	});
+
+	it("ship's tier-independent panel and gate carry the risk unit the same way", async () => {
+		const named = {
+			plans: [chan(PLAN, { risks: RISKS })],
+			research: [chan(".rpiv/artifacts/research/r.md")],
+			...citeChannels,
+			"ship-verdicts": [],
+		};
+		const us = await SHIP_DIMENSION_FANOUT.units({
+			cwd: "/repo",
+			artifact: undefined,
+			state: { named } as unknown as RunView,
+		});
+		expect(us.map((u) => u.label).sort()).toEqual([...SHIP_DIMENSIONS, "risk-rulings"].sort());
+		const shipPass = SHIP_DIMENSIONS.map((d) => verdict(d, true));
+		const sentinel = {
+			artifacts: [],
+			kind: "failed",
+			meta: {},
+			data: { dimension: "risk-rulings" },
+		} as unknown as Output;
+		expect(
+			shipGatePasses({ named: { ...named, "ship-verdicts": [...shipPass, sentinel] } } as unknown as RunView),
+		).toBe(false);
+		expect(
+			shipGatePasses({
+				named: {
+					...named,
+					"ship-verdicts": [
+						...shipPass,
+						verdict("risk-rulings", true, {
+							risk_rulings: [{ id: "r1", pass: true, evidence: "packages/x/y.ts:42" }],
+						}),
+					],
+				},
+			} as unknown as RunView),
+		).toBe(true);
 	});
 });
