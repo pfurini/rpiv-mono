@@ -8,6 +8,7 @@ import {
 	DEFAULT_TOOL_DESCRIPTION,
 	registerAskUserQuestionTool,
 } from "./ask-user-question.js";
+import { MAX_LABEL_LENGTH, RECOMMENDED_MARKER } from "./tool/types.js";
 
 const TOOL_NAME = "ask_user_question";
 const CONFIG_PATH = join(process.env.HOME!, ".config", "rpiv-ask-user-question", "config.json");
@@ -37,6 +38,13 @@ it("describes the all-question custom-answer contract in the registered tool", (
 	const tool = captured.tools.get(TOOL_NAME)!;
 	expect(tool.description).toContain('automatically appended "Type something." row on every question');
 	expect(tool.description).toContain("reserved labels are rejected at runtime");
+});
+
+it("exempts the recommended marker from the label limit in both default texts", () => {
+	const budget = `the marker does not count toward the ${MAX_LABEL_LENGTH}-character label limit`;
+	expect(DEFAULT_PROMPT_GUIDELINES.join("\n")).toContain(`append "${RECOMMENDED_MARKER}" to its label; ${budget}`);
+	expect(DEFAULT_TOOL_DESCRIPTION).toContain(`add "${RECOMMENDED_MARKER}" at the end of the label. The marker`);
+	expect(DEFAULT_TOOL_DESCRIPTION.toLowerCase()).toContain(budget);
 });
 
 describe("registerAskUserQuestionTool — guidance overrides", () => {

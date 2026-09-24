@@ -40,6 +40,8 @@ export const QuestionParamsSchema = Type.Object({ questions: Type.Array(Question
 ```
 Every field carries a `description` — these are the LLM-facing prompt; hard limits are embedded as `MAX N CHARACTERS` text to teach the model. The `options` description ends with "The 'Type something.' row is appended automatically — do NOT author it." — a model-conditioning guard tied to free-text now being offered on every question type, including multi-select.
 
+**Recommended-marker budget**: the default guidance asks the model to append `RECOMMENDED_MARKER` (`"(Recommended)"`) to its recommended option's label. `OptionSchema.label` therefore caps at `MAX_OPTION_LABEL_LENGTH` (`MAX_LABEL_LENGTH` + 1 space + the marker = 74), and its description, the tool description, and the prompt guideline all state that the marker does not count toward `MAX_LABEL_LENGTH`. `SetAsideSchema.label` keeps `MAX_LABEL_LENGTH`: rejected alternatives never carry the marker. The schema only measures length; it does not check that the extra 14 characters are the marker.
+
 ## Result Envelope (canonical builder)
 ```ts
 export function buildToolResult(text: string, details: QuestionnaireResult) {

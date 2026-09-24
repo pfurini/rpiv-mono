@@ -13,7 +13,7 @@ ask_user_question({
       header: string,              // chip label, max 16 chars
       options: [
         {
-          label: string,           // 1-5 words, max 60 chars
+          label: string,           // 1-5 words, max 60 chars (+ " (Recommended)", 74 total)
           description: string,     // what the choice means / its trade-off
           preview?: string,        // markdown rendered next to the options
         },
@@ -34,7 +34,7 @@ ask_user_question({
 | `questions` | 1-4 entries | TypeBox schema + `validateQuestionnaire` |
 | `questions[].header` | max 16 characters | TypeBox schema only |
 | `questions[].options` | 2-8 entries | TypeBox schema + `validateQuestionnaire` (both bounds) |
-| `options[].label` | max 60 characters | TypeBox schema only |
+| `options[].label` | max 60 characters, plus an optional trailing ` (Recommended)` (hard cap 74) | TypeBox schema only |
 | `options[].preview` | single-select questions only | tool description (multi-select tabs render checkbox rows) |
 | `questions[].setAside` | Optional array; empty means no disclosure | TypeBox schema + runtime validator |
 | `setAside[].label` | Nonblank, max 60 characters | TypeBox schema + runtime validator |
@@ -42,6 +42,10 @@ ask_user_question({
 
 The header and selectable-option label lengths are checked by the parameter schema only.
 Both boundaries check the new rejected-alternative fields. Line terminators normalize before runtime validation.
+The default guidance tells the model to append ` (Recommended)` to the option it recommends.
+The option label cap budgets those 14 characters on top of the 60, so a full-length recommended label validates.
+The schema cannot tell the marker apart from other text: any label up to 74 characters passes.
+Set-aside labels never carry the marker and keep the 60-character limit.
 
 ### Rejected alternatives
 

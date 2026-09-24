@@ -6,6 +6,15 @@ export const MIN_OPTIONS = 2;
 export const MAX_OPTIONS = 8;
 export const MAX_HEADER_LENGTH = 16;
 export const MAX_LABEL_LENGTH = 60;
+/** Marker the guidance asks the model to append, after one space, to its recommended option's label. */
+export const RECOMMENDED_MARKER = "(Recommended)";
+/**
+ * Option labels budget the separating space and `RECOMMENDED_MARKER` on top of
+ * `MAX_LABEL_LENGTH`, so a full-length recommended label still validates. The
+ * guidance mandates the marker; charging it against the base limit rejected calls
+ * that followed the guidance. Set-aside labels never carry it and keep the base limit.
+ */
+export const MAX_OPTION_LABEL_LENGTH = MAX_LABEL_LENGTH + 1 + RECOMMENDED_MARKER.length;
 
 /**
  * User-facing labels for the three runtime sentinel rows, keyed by their
@@ -39,8 +48,8 @@ export type ReservedLabel = (typeof RESERVED_LABELS)[number];
 
 export const OptionSchema = Type.Object({
 	label: Type.String({
-		maxLength: MAX_LABEL_LENGTH,
-		description: `MAX ${MAX_LABEL_LENGTH} CHARACTERS — hard limit, requests over the limit are rejected. The display text for this option that the user will see and select. Should be concise (1-5 words) and clearly describe the choice.`,
+		maxLength: MAX_OPTION_LABEL_LENGTH,
+		description: `MAX ${MAX_LABEL_LENGTH} CHARACTERS, not counting an optional trailing " ${RECOMMENDED_MARKER}" (hard limit ${MAX_OPTION_LABEL_LENGTH} with it); requests over the limit are rejected. The display text for this option that the user will see and select. Should be concise (1-5 words) and clearly describe the choice.`,
 	}),
 	description: Type.String({
 		description:

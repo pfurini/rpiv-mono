@@ -17,6 +17,10 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - Questions accept 2-8 selectable options. Schema and runtime validation reject oversized calls without truncation.
 - Default guidance treats capacity as a ceiling, not a target, and keeps rejected context separate from viable choices and user consent.
 
+### Fixed
+
+- A full-length option label that ends with the ` (Recommended)` marker the guidance asks for no longer fails schema validation before the dialog opens. The option label cap budgets the marker on top of the 60 characters (74 in total), and the tool description and prompt guideline state that the marker does not count. Set-aside labels keep the 60-character limit.
+
 ## [2.11.0] - 2026-09-21
 
 ## [2.10.1] - 2026-09-13

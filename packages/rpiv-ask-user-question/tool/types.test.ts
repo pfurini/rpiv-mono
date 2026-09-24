@@ -4,6 +4,7 @@ import {
 	isQuestionnaireResult,
 	MAX_HEADER_LENGTH,
 	MAX_LABEL_LENGTH,
+	MAX_OPTION_LABEL_LENGTH,
 	MAX_OPTIONS,
 	MAX_QUESTIONS,
 	MIN_OPTIONS,
@@ -12,7 +13,9 @@ import {
 	type QuestionnaireResult,
 	QuestionParamsSchema,
 	QuestionsSchema,
+	RECOMMENDED_MARKER,
 	RESERVED_LABELS,
+	SetAsideSchema,
 } from "./types.js";
 
 function makeQuestion(override: Partial<QuestionData> = {}): QuestionData {
@@ -119,8 +122,23 @@ describe("QuestionSchema — option/preview/multiSelect/header shape", () => {
 		expect(Value.Check(QuestionsSchema, [makeQuestion({ header: tooLong })])).toBe(false);
 	});
 
-	it("rejects a label longer than MAX_LABEL_LENGTH (60) chars", () => {
-		const tooLong = "x".repeat(MAX_LABEL_LENGTH + 1);
+	it("accepts a full-length label carrying the recommended marker", () => {
+		const recommended = `${"x".repeat(MAX_LABEL_LENGTH)} ${RECOMMENDED_MARKER}`;
+		expect(recommended).toHaveLength(MAX_OPTION_LABEL_LENGTH);
+		expect(
+			Value.Check(QuestionsSchema, [
+				makeQuestion({
+					options: [
+						{ label: recommended, description: "a" },
+						{ label: "B", description: "b" },
+					],
+				}),
+			]),
+		).toBe(true);
+	});
+
+	it("rejects a label longer than MAX_OPTION_LABEL_LENGTH chars", () => {
+		const tooLong = "x".repeat(MAX_OPTION_LABEL_LENGTH + 1);
 		expect(
 			Value.Check(QuestionsSchema, [
 				makeQuestion({
@@ -131,6 +149,11 @@ describe("QuestionSchema — option/preview/multiSelect/header shape", () => {
 				}),
 			]),
 		).toBe(false);
+	});
+
+	it("keeps set-aside labels at MAX_LABEL_LENGTH (no marker budget)", () => {
+		expect(Value.Check(SetAsideSchema, { label: "x".repeat(MAX_LABEL_LENGTH), reason: "why" })).toBe(true);
+		expect(Value.Check(SetAsideSchema, { label: "x".repeat(MAX_LABEL_LENGTH + 1), reason: "why" })).toBe(false);
 	});
 
 	it("rejects question with missing 'question' text", () => {
@@ -284,6 +307,8 @@ describe("schema constants + RESERVED_LABELS", () => {
 		expect(MAX_OPTIONS).toBe(8);
 		expect(MAX_HEADER_LENGTH).toBe(16);
 		expect(MAX_LABEL_LENGTH).toBe(60);
+		expect(RECOMMENDED_MARKER).toBe("(Recommended)");
+		expect(MAX_OPTION_LABEL_LENGTH).toBe(74);
 	});
 
 	it("RESERVED_LABELS includes the Pi sentinels + CC's 'Other'", () => {

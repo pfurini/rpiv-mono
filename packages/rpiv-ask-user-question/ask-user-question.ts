@@ -21,6 +21,7 @@ import { sentinelsToAppend } from "./state/row-intent.js";
 import { normalizeQuestionParams } from "./tool/normalize-params.js";
 import { buildQuestionnaireResponse, buildToolResult } from "./tool/response-envelope.js";
 import {
+	MAX_LABEL_LENGTH,
 	MAX_OPTIONS,
 	MAX_QUESTIONS,
 	MIN_OPTIONS,
@@ -29,6 +30,7 @@ import {
 	type QuestionnaireResult,
 	type QuestionParams,
 	QuestionParamsSchema,
+	RECOMMENDED_MARKER,
 } from "./tool/types.js";
 import { validateQuestionnaire } from "./tool/validate-questionnaire.js";
 import type { WrappingSelectItem } from "./view/components/wrapping-select.js";
@@ -279,7 +281,7 @@ export const DEFAULT_PROMPT_GUIDELINES: string[] = [
 	`Offer materially distinct, viable choices within ${MIN_OPTIONS}-${MAX_OPTIONS} options. The maximum is capacity, not a target. Each choice needs a concise label and a description of its consequences. Users can choose the automatically appended "Type something." row on every question or press Esc to abandon the questionnaire. Keep reserved labels out of authored options.`,
 	"Proceed with settled implementation choices and record the reason. Ask explicitly when consent, approval or a genuine preference is needed. Keep the question and consequences self-contained inside the dialog.",
 	"Use optional setAside only for alternatives actually considered and rejected, with a label and reason. Omit it when none matter. A viable alternative belongs in options, never in setAside to fit the capacity. The tool presents choices; it does not invent or shortlist them.",
-	`Set multiSelect: true when multiple answers are valid. Provide an options[].preview markdown string when an option benefits from richer side-by-side context (mockups, code snippets, diagrams, configs) — single-select only. The "Type something." row is appended to every question; in preview mode it expands to the full pane width while typing so the custom answer is not cramped into the narrow options column. If you recommend a specific option, make that the first option and append "(Recommended)" to its label.`,
+	`Set multiSelect: true when multiple answers are valid. Provide an options[].preview markdown string when an option benefits from richer side-by-side context (mockups, code snippets, diagrams, configs) — single-select only. The "Type something." row is appended to every question; in preview mode it expands to the full pane width while typing so the custom answer is not cramped into the narrow options column. If you recommend a specific option, make that the first option and append "${RECOMMENDED_MARKER}" to its label; the marker does not count toward the ${MAX_LABEL_LENGTH}-character label limit.`,
 	"Do not stack multiple ask_user_question calls back-to-back — group all clarifying questions into one invocation.",
 ];
 
@@ -295,7 +297,7 @@ Usage notes:
 - Settled implementation choices need a recorded reason, not a manufactured fork. Consent and approval still require an explicit question.
 - Users can type a custom answer via the automatically appended "Type something." row on every question or press Esc to abandon the questionnaire. Do NOT author "Other" or "Type something." labels yourself — reserved labels are rejected at runtime.
 - Use multiSelect: true when multiple answers are valid. The "Type something." row is available on every question, including when options carry a \`preview\`; in preview mode it expands to the full pane width while typing so the custom answer is not cramped into the narrow options column.
-- If you recommend a specific option, make that the first option in the list and add "(Recommended)" at the end of the label.
+- If you recommend a specific option, make that the first option in the list and add "${RECOMMENDED_MARKER}" at the end of the label. The marker does not count toward the ${MAX_LABEL_LENGTH}-character label limit.
 
 Preview feature:
 Use the optional \`preview\` field on options when presenting concrete artifacts that users need to visually compare:
