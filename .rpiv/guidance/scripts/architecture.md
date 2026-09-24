@@ -3,14 +3,19 @@
 ## Responsibility
 Lockstep release pipeline for the rpiv-mono workspace, plus a safety-proof harness. `release.mjs` orchestrates an end-to-end release (preflight incl. npm-auth → bump → CHANGELOG promote → commit + tag → publish → reinstate `[Unreleased]` → push); `sync-versions.js` enforces the lockstep invariant and rewrites intra-monorepo `dependencies`/`devDependencies` to `^<lockstep-version>`. Together they implement: a release is one atomic, reproducible monorepo-wide action. `check-slice-overlap.mjs` is a standalone proof harness that validates `packages/rpiv-pi/skills/_shared/slice-overlap.mjs` against an independent broader oracle (no release role). `check-no-decision-codes.mjs` is a second non-release guard — a standing prevention check that keeps design-doc decision-codes out of committed `.ts`.
 
+`pi-fork.mjs` and `check-fork.mjs` serve a third, non-release concern: opt-in runs of the suite and the typecheck against a local pi fork build. See "Pi Fork Runs" below.
+
 ## Dependencies
 Node built-ins only — plus one cross-tree workspace import: `check-slice-overlap.mjs` imports `partition` from `packages/rpiv-pi/skills/_shared/slice-overlap.mjs`. Shells out to `git`, `npm`, `npx shx`. Reads `packages/rpiv-pi/package.json` as the canonical version oracle. Zero third-party packages.
+
+The fork runners are the one exception to "no third-party packages": `check-fork.mjs` spawns the repo's own `typescript` devDependency, and `pi-fork.mjs` resolves `typebox` from the fork's coding-agent package. `pi-fork.mjs` shells out to `git` only for the fork banner.
 
 ## Consumers
 - **Developers**: `npm run release:{patch|minor|major}` or `node scripts/release.mjs <x.y.z>`
 - **Root npm scripts**: `version:*` chains call the sync script after `npm version -ws`
 - **CI** (`.github/workflows/ci.yml`): runs `npm run check:decision-codes` + `npm run check` + `npm run coverage` on push/PR (Node 22/24) — but publishing stays **local-only by design**: no workflow runs `npm publish`
 - **Husky hooks**: `pre-commit` runs `npm run check:decision-codes` fail-fast, then `npm run check` — gating the clean-tree precondition the release script asserts; `pre-push` (`npm run coverage`) ensures a release-tag push has green tests
+- **Developers running Pi from a fork checkout**: `npm run test:fork` and `npm run check:fork`. CI and the husky hooks never run them.
 
 ## Module Structure
 ```
@@ -18,10 +23,21 @@ release.mjs            — Imperative release pipeline (no exports; run() exits 
 sync-versions.js       — Lockstep invariant + intra-monorepo dep rewrite (idempotent)
 check-slice-overlap.mjs — Safety proof for packages/rpiv-pi/skills/_shared/slice-overlap.mjs; flags under-selection only
 check-no-decision-codes.mjs — Pre-commit guard: no parenthesized decision-code citations in scoped *.ts
+pi-fork.mjs            — Locates a built pi fork (PI_FORK_DIR, default ../pi); owns the specifier table both fork runners share
+check-fork.mjs         — Opt-in read-only typecheck against the fork's declarations (writes node_modules/.cache/pi-fork/tsconfig.json)
 ```
 
 ## Fresh-Resolution Hazard (why root devDependencies are pinned EXACT)
 Both release paths delete `package-lock.json` + `node_modules` and reinstall ("lockfile honesty") — so on release day, caret specs re-resolve to whatever npm serves. This broke the v2.0.0 release twice: biome `^2.5.0` → 2.5.5 (new lint errors failed pre-commit) and pi `^0.80.5` → 0.80.10 (`modelRegistry` → `modelRuntime` rename broke tsc). The root `devDependencies` are therefore pinned **exact** (biome, tsc, vitest, coverage, pi-*, typebox, husky, shx) — bump them deliberately in a normal commit, never let a release float them. The `@earendil-works/pi-*` trio is held pre-0.80.10 (currently pinned exact at 0.80.6, mirrored in root `overrides`) until the `modelRuntime` migration lands. Transitive deps can still drift — the coverage preflight is the backstop.
+
+## Pi Fork Runs (opt-in)
+The exact pi pin tests the published host. A developer who runs Pi from a fork checkout tests against that fork with two opt-in commands:
+- `npm run test:fork`: `vitest.fork.config.mjs` merges `vitest.config.ts` and redirects every pi specifier to the fork's `dist/`.
+- `npm run check:fork [-- packages/<name> ...]`: `check-fork.mjs` writes `node_modules/.cache/pi-fork/tsconfig.json` and runs `tsc --noEmit` on it. The config extends `tsconfig.base.json` and adds the fork's declaration `paths`.
+
+`pi-fork.mjs` owns the specifier table both commands use, so the test aliases and the type paths cannot drift apart. `PI_FORK_DIR` names the checkout (default `../pi` beside the repo root). A missing or unbuilt fork exits 1 with the remedy. The banner names the fork's branch, commit, and version, and warns when `dist/` predates HEAD.
+
+The table mirrors the fork's extension loader aliases with one exception. The `pi-ai` root maps to the core entry, not to `/compat`. `test/setup.ts` mocks the root and `/compat` as separate modules; one shared file would merge the two mocks and fail the rpiv-btw and rpiv-advisor suites. The pin stays the CI gate.
 
 ## Lockstep Invariant Enforcement
 `sync-versions.js` is **all-or-nothing**: if any two workspace packages have drifted to different versions, it fails the build before writing anything. `peerDependencies` are deliberately **untouched** — the zero-cross-imports contract requires they stay `"*"`.

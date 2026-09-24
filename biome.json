@@ -33,6 +33,7 @@
 			"scripts/**/*.mjs",
 			"test/**/*.ts",
 			"vitest.config.ts",
+			"vitest.fork.config.mjs",
 			"!**/node_modules",
 			"!**/.pi",
 			"!**/.rpiv",

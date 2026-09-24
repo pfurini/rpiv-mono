@@ -13,9 +13,10 @@ rpiv-mono/
 │   ├── rpiv-telemetry/           — Private Pi extension: MLflow observability (private opt-in; not in siblings.ts)
 │   └── test-utils/               — Private workspace package: shared test fixtures (not published)
 ├── test/                         — Repo-wide Vitest setup (homedir stub + env hygiene + pi-ai//compat mocks + beforeEach singleton resets)
-├── scripts/                      — Lockstep release pipeline (release.mjs + sync-versions.js) + repo guards (check-no-decision-codes.mjs, check-slice-overlap.mjs)
+├── scripts/                      — Lockstep release pipeline (release.mjs + sync-versions.js) + repo guards (check-no-decision-codes.mjs, check-slice-overlap.mjs) + opt-in pi fork runs (pi-fork.mjs, check-fork.mjs)
 ├── thoughts/shared/              — Pipeline artifacts: questions/, research/, solutions/, designs/, plans/, reviews/ (gitignored)
 ├── vitest.config.ts              — Single Vitest runner; `include: ['packages/*/**/*.test.ts']`, setupFiles `['./test/setup.ts']`
+├── vitest.fork.config.mjs        — Opt-in: the same runner with the pi specifiers redirected to a local pi fork build (`npm run test:fork`)
 ├── tsconfig.base.json            — Single shared TS config; no per-package tsconfig.json (rpiv-site has its own — excluded here)
 ├── package.json                  — npm workspaces root
 └── biome.json                    — Single shared lint/format config
@@ -42,6 +43,8 @@ rpiv-mono/
 | `npm test` | Vitest at root (single runner; `include: ['packages/*/**/*.test.ts']` walks every package) |
 | `npm run build:site` | Build the Astro marketing site (`packages/rpiv-site`) — separate from publish |
 | `npm run coverage` | Vitest with V8 coverage |
+| `npm run test:fork` | Vitest against a local pi fork build. `PI_FORK_DIR` names the checkout (default `../pi`); the fork must be built. Opt-in: CI and the husky hooks never run it |
+| `npm run check:fork [-- packages/<name> ...]` | Read-only `tsc --noEmit` against the fork's declarations. Package paths narrow the scope; no argument checks the whole tree |
 | `node scripts/release.mjs <patch\|minor\|major\|x.y.z>` | Cut a lockstep release — see `.rpiv/guidance/scripts/architecture.md` |
 | `node scripts/sync-versions.js` | Verify lockstep + rewrite intra-monorepo deps to `^<version>` |
 
